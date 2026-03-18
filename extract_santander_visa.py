@@ -17,7 +17,12 @@ def parse_args() -> argparse.Namespace:
         description="Extract Santander Visa transactions from PDF statements into CSV."
     )
     parser.add_argument("inputs", nargs="+", help="PDF files and/or folders containing PDFs.")
-    parser.add_argument("-o", "--output", default="movimientos.csv", help="Output CSV path.")
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="output/movimientos.csv",
+        help="Output CSV path.",
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging for skipped lines.")
     parser.add_argument(
         "--use-pandas",
@@ -88,7 +93,9 @@ def main() -> int:
             int(row["source_line_no"]),
         )
     )
-    write_transactions_csv(all_rows, Path(args.output), use_pandas=args.use_pandas)
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_transactions_csv(all_rows, output_path, use_pandas=args.use_pandas)
     logger.info("CSV generated at %s with %s transactions", args.output, len(all_rows))
     return 0
 
