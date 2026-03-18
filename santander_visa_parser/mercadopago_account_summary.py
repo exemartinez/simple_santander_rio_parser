@@ -189,6 +189,7 @@ class MercadoPagoAccountSummary(CreditCardAccountSummaryFormat):
         amount = self.parse_decimal(match.group("amount"))
         if not amount:
             return None
+        signed_amount = self.negate_decimal_string(amount)
 
         return Transaction(
             source_file=source_file.name,
@@ -200,7 +201,7 @@ class MercadoPagoAccountSummary(CreditCardAccountSummaryFormat):
             description=match.group("description").strip(),
             currency="ARS",
             amount=amount,
-            ars_amount=amount,
+            ars_amount=signed_amount,
             usd_amount="",
             original_currency="",
             original_amount="",
@@ -236,6 +237,12 @@ class MercadoPagoAccountSummary(CreditCardAccountSummaryFormat):
         if negative:
             decimal_value *= Decimal("-1")
         return format(decimal_value.quantize(Decimal("0.01")), "f")
+
+    def negate_decimal_string(self, value: str) -> str:
+        """Return the decimal string multiplied by -1."""
+        if not value:
+            return ""
+        return format((Decimal(value) * Decimal("-1")).quantize(Decimal("0.01")), "f")
 
     def collapse_whitespace(self, value: str) -> str:
         return re.sub(r"\s+", " ", value).strip()
