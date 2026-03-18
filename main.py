@@ -1,4 +1,4 @@
-"""CLI entrypoint for Santander Visa PDF transaction extraction."""
+"""CLI entrypoint for credit card and account statement PDF extraction."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from datetime import datetime
 from pathlib import Path
 
 from santander_visa_parser.csv_writer import TransactionCSVWriter
+from santander_visa_parser.format_registry import StatementFormatRegistry
 from santander_visa_parser.pdf_reader import PDFTextReader
-from santander_visa_parser.santander_rio_visa_summary import SantanderRioVISASummary
 from santander_visa_parser.transaction_parser import TransactionParser
 
 
@@ -17,8 +17,9 @@ class CLIArguments:
     """Command-line argument builder."""
 
     def __init__(self) -> None:
+        format_registry = StatementFormatRegistry()
         self.parser = argparse.ArgumentParser(
-            description="Extract Santander Visa transactions from PDF statements into CSV."
+            description="Extract normalized transactions from supported PDF statements into CSV."
         )
         self.parser.add_argument("inputs", nargs="+", help="PDF files and/or folders containing PDFs.")
         self.parser.add_argument(
@@ -41,6 +42,12 @@ class CLIArguments:
             "--currency-filter",
             choices=("ARS", "USD"),
             help="Keep only transactions billed in the selected currency.",
+        )
+        self.parser.add_argument(
+            "--format",
+            default="auto",
+            choices=("auto", *format_registry.names()),
+            help="Statement format to use. Defaults to auto-detection.",
         )
 
     def parse(self) -> argparse.Namespace:
@@ -81,17 +88,17 @@ class PDFPathCollector:
         return sorted(dict.fromkeys(discovered))
 
 
-class SantanderVisaExtractionApplication:
+class StatementExtractionApplication:
     """Application service coordinating PDF extraction and CSV writing."""
 
     def __init__(
         self,
         text_reader: PDFTextReader,
-        parser: TransactionParser,
+        format_registry: StatementFormatRegistry,
         csv_writer: TransactionCSVWriter,
     ) -> None:
         self.text_reader = text_reader
-        self.parser = parser
+        self.format_registry = format_registry
         self.csv_writer = csv_writer
         self.logger = logging.getLogger(__name__)
 
@@ -107,7 +114,13 @@ class SantanderVisaExtractionApplication:
         for pdf_path in pdf_files:
             self.logger.info("Processing %s", pdf_path)
             text = self.text_reader.extract_text(pdf_path)
-            rows = self.parser.parse(
+            selected_format_name, parser_format = self.format_registry.resolve(
+                args.format,
+                text=text,
+                source_file=pdf_path,
+            )
+            self.logger.info("Using format %s for %s", selected_format_name, pdf_path.name)
+            rows = TransactionParser(parser_format).parse(
                 text=text,
                 source_file=pdf_path,
                 currency_filter=args.currency_filter,
@@ -138,9 +151,9 @@ def main() -> int:
     """Run the CLI."""
     args = CLIArguments().parse()
     LoggingConfigurator().configure(args.debug)
-    application = SantanderVisaExtractionApplication(
+    application = StatementExtractionApplication(
         text_reader=PDFTextReader(),
-        parser=TransactionParser(SantanderRioVISASummary()),
+        format_registry=StatementFormatRegistry(),
         csv_writer=TransactionCSVWriter(),
     )
     return application.run(args)
